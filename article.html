@@ -11,6 +11,22 @@ body{margin:0;font-family:Inter,Arial;background:#f4fbff;color:#102a43}
 .meta{color:#667;font-size:13px}
 .content{background:#fff;padding:18px;border-radius:10px;margin-top:12px;box-shadow:0 10px 30px rgba(16,42,67,0.05)}
 .btn{padding:8px 10px;border-radius:8px;border:0;background:#1f8efc;color:#fff;cursor:pointer}
+.btn.liked{background:#ff7fbf;color:#fff}
+/* like badge */
+.like-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#ffe88a;color:#2b2b2b;font-weight:700;margin-left:10px;border:1px solid rgba(0,0,0,0.06)}
+.like-badge .thumb{font-size:14px;line-height:1}
+.like-badge .count{font-variant-numeric: tabular-nums}
+/* shake animation */
+@keyframes like-shake {
+  0% { transform: translateX(0) rotate(0deg); }
+  15% { transform: translateX(-6px) rotate(-6deg); }
+  30% { transform: translateX(6px) rotate(6deg); }
+  45% { transform: translateX(-4px) rotate(-4deg); }
+  60% { transform: translateX(4px) rotate(4deg); }
+  75% { transform: translateX(-2px) rotate(-2deg); }
+ 100% { transform: translateX(0) rotate(0deg); }
+}
+.like-badge.shake{animation: like-shake 420ms ease-in-out}
 </style>
 </head>
 <body>
@@ -21,7 +37,9 @@ body{margin:0;font-family:Inter,Arial;background:#f4fbff;color:#102a43}
       <div id="meta" class="meta"></div>
     </div>
     <div>
+      <button id="homeBtn" class="btn" style="background:#eef0f3;color:#102a43;margin-right:8px">返回主页</button>
       <button id="likeBtn" class="btn">点赞</button>
+      <span id="likeCount" class="like-badge" role="status" aria-label="点赞数"><span class="thumb">👍</span><span class="count">0</span></span>
     </div>
   </div>
   <div id="content" class="content">内容加载中…</div>
@@ -42,17 +60,69 @@ function md2html(s){
 const id = new URLSearchParams(location.search).get('id');
 async function load(){
   if(!id){ document.getElementById('title').textContent='文章未指定'; return; }
-  const a = await fetch('/api/articles/'+id).then(r=>r.json()).catch(()=>null);
+  // include user if available to get liked status
+  const user = (typeof localStorage !== 'undefined') ? localStorage.getItem('user') : null;
+  const url = user ? `/api/articles/${id}?user=${encodeURIComponent(user)}` : `/api/articles/${id}`;
+  const a = await fetch(url).then(r=>r.json()).catch(()=>null);
   if(!a){ document.getElementById('title').textContent='未找到文章'; return; }
   document.getElementById('title').textContent = a.title;
-  document.getElementById('meta').textContent = `作者：${a.owner} · ${a.created_at || ''} · 阅读 ${a.likes||0}`;
+  document.getElementById('meta').textContent = `作者：${a.owner} · ${a.created_at || ''} · 阅读 ${a.views||0}`;
   document.getElementById('content').innerHTML = md2html(a.content);
+  // update like button state and count
+  const likeBtn = document.getElementById('likeBtn');
+  const likeCount = document.getElementById('likeCount');
+  if(likeCount){
+    const c = likeCount.querySelector('.count');
+    if(c) c.textContent = String(a.likes || 0);
+  }
+  if(a.liked){
+    likeBtn.classList.add('liked');
+    likeBtn.textContent = '已点赞';
+  }else{
+    likeBtn.classList.remove('liked');
+    likeBtn.textContent = '点赞';
+  }
 }
 document.getElementById('likeBtn').addEventListener('click', async ()=>{
   try{
-    const res = await fetch('/api/articles/'+id+'/like',{method:'POST'});
-    if(res.ok){ alert('已点赞'); load(); } else alert('点赞失败');
+    const user = (typeof localStorage !== 'undefined') ? localStorage.getItem('user') : null;
+    if(!user){ alert('请先登录再点赞'); return; }
+    const likeBtn = document.getElementById('likeBtn');
+    const likeCount = document.getElementById('likeCount');
+    if(likeBtn.classList.contains('liked')){
+      // unlike
+      const res = await fetch('/api/articles/'+id+'/unlike',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user})});
+      const data = await res.json().catch(()=>({}));
+      if(res.ok){
+        likeBtn.classList.remove('liked'); likeBtn.textContent = '点赞';
+        if(typeof data.likes !== 'undefined' && likeCount){ const c = likeCount.querySelector('.count'); if(c) c.textContent = String(data.likes); }
+      }
+      else{ alert((data && data.error) ? data.error : '取消点赞失败'); }
+    }else{
+      // like
+      const res = await fetch('/api/articles/'+id+'/like',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user})});
+      const data = await res.json().catch(()=>({}));
+        if(res.ok){
+        likeBtn.classList.add('liked'); likeBtn.textContent = '已点赞';
+        if(typeof data.likes !== 'undefined' && likeCount){ const c = likeCount.querySelector('.count'); if(c) c.textContent = String(data.likes); }
+        // trigger short shake animation on the badge
+        try{
+          if(likeCount){
+            likeCount.classList.remove('shake');
+            // force reflow to restart animation
+            void likeCount.offsetWidth;
+            likeCount.classList.add('shake');
+            likeCount.addEventListener('animationend', ()=> likeCount.classList.remove('shake'), {once:true});
+          }
+        }catch(e){/* ignore */}
+      }
+      else{ alert((data && data.error) ? data.error : '点赞失败'); }
+    }
   }catch(e){ alert('网络错误') }
+});
+// 返回主页按钮
+document.getElementById('homeBtn').addEventListener('click', ()=>{
+  try{ location.href = '/'; }catch(e){ /* no-op */ }
 });
 load();
 </script>

@@ -6,36 +6,37 @@
 <title>论坛博客 - 首页</title>
 <style>
 :root{
-  --bg:#eaf6ff; --primary:#1f8efc; --card:#ffffff; --muted:#667;
+  --bg: #eef9ff; /* 浅蓝色底色 */
+  --primary:#1f8efc;
+  --card:#ffffff;
+  --muted:#667;
   --maxw:1100px;
+  --content-max:860px; /* 搜索框与文章卡片统一宽度 */
 }
-html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#102a43;background:var(--bg);}
-body::before{
-  content:"";position:fixed;inset:0;background:linear-gradient(180deg,rgba(31,142,252,0.12),rgba(31,142,252,0.06));
-  z-index:-1;
-}
-.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(255,255,255,0.6);backdrop-filter:blur(6px);box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#102a43;background:var(--bg);} 
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg);box-shadow:none;border-bottom:1px solid rgba(0,0,0,0.04)}
 .container{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;width:100%}
 .brand{display:flex;align-items:center;gap:12px}
 .logo{width:44px;height:44px;border-radius:8px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
 .spacer{flex:1}
 .login-btn{background:transparent;border:1px solid rgba(0,0,0,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
 .header-row{max-width:var(--maxw);margin:18px auto;display:flex;gap:12px;padding:0 16px}
-.panel{background:var(--card);border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(16,42,67,0.06)}
+.panel{background:var(--card);border-radius:10px;padding:14px;box-shadow:none;border:1px solid rgba(0,0,0,0.04)}
 .left{width:240px;min-height:120px}
 .right{flex:1;display:flex;justify-content:flex-end;align-items:center}
 .search-wrap{display:flex;justify-content:center;margin-top:12px}
-.search{width:100%;max-width:860px;display:flex;gap:8px;background:#fff;padding:14px;border-radius:10px;box-shadow:0 8px 22px rgba(16,42,67,0.06)}
+.search{width:100%;max-width:var(--content-max);display:flex;gap:8px;background:#fff;padding:14px;border-radius:10px;box-shadow:0 8px 22px rgba(16,42,67,0.06)}
 .search input{flex:1;border:0;outline:none;font-size:16px}
 .search button{background:var(--primary);color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
 .columns{max-width:var(--maxw);margin:18px auto;display:grid;grid-template-columns:1fr 320px;gap:18px;padding:0 16px}
-.list{display:flex;flex-direction:column;gap:12px}
-.card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(16,42,67,0.04)}
+.list{display:flex;flex-direction:column;gap:12px;max-width:var(--content-max);margin:0 auto;align-items:stretch}
+.card{background:var(--card);padding:18px;border-radius:10px;border:1px solid rgba(0,0,0,0.04);width:100%;min-height:180px}
 .card h3{margin:0;font-size:18px}
 .meta{color:var(--muted);font-size:13px;margin-top:6px}
 .aside .card{padding:12px}
 .tag{display:inline-block;padding:4px 8px;border-radius:6px;background:#eef6ff;color:var(--primary);font-size:12px;margin-right:6px}
-@media(max-width:900px){ .header-row{flex-direction:column;gap:8px}.columns{grid-template-columns:1fr} .left{width:100%} }
+.likes{display:inline-block;padding:4px 8px;border-radius:6px;background:#fff7e6;color:#b35700;font-size:12px;margin-right:8px;border:1px solid rgba(0,0,0,0.04)}
+@media(max-width:900px){ .header-row{flex-direction:column;gap:8px}.columns{grid-template-columns:1fr} .left{width:100%} .card{width:100%;max-width:100%} }
 </style>
 </head>
 <body>
@@ -51,7 +52,7 @@ body::before{
   <div class="panel left" id="trafficPanel">
     <h4>网站流量</h4>
     <div id="trafficValue" style="font-size:28px;margin-top:8px;color:var(--primary)">–</div>
-    <div style="font-size:12px;color:var(--muted);margin-top:6px">实时在线 / 日访问</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">实时在线 / 今日访问</div>
   </div>
   <div class="panel right">
     <div style="text-align:right">
@@ -74,6 +75,11 @@ body::before{
   </div>
 
 </section>
+
+<!-- 把“显示更多”按钮放在文章列表下方并居中 -->
+<div style="max-width:var(--maxw);margin:8px auto;text-align:center;padding:0 16px">
+  <button id="toggleMoreBtn" class="login-btn" style="display:none">显示更多</button>
+</div>
 
 <!-- 登录弹窗（示例，无后端校验需对接 /api/login /api/register） -->
 <div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
@@ -98,25 +104,62 @@ async function loadTraffic(){
     document.getElementById('trafficValue').textContent = `${data.online || 0} 在线 • ${data.daily || 0} 日访问`;
   }catch(e){ console.warn(e) }
 }
+let _lastArticles = [];
+let _collapsed = true;
+const COLLAPSE_LIMIT = 5;
+
+function applyCollapse(){
+  const items = document.querySelectorAll('#articleList .card');
+  items.forEach((it, idx)=>{
+    if(_collapsed && idx >= COLLAPSE_LIMIT) it.style.display = 'none';
+    else it.style.display = '';
+  });
+  const btn = document.getElementById('toggleMoreBtn');
+  if(!btn) return;
+  btn.style.display = _lastArticles.length > COLLAPSE_LIMIT ? 'inline-block' : 'none';
+  btn.textContent = _collapsed ? `显示更多 (${Math.max(0, _lastArticles.length - COLLAPSE_LIMIT)})` : '收起';
+}
+
+document.getElementById('toggleMoreBtn').addEventListener('click', ()=>{
+  _collapsed = !_collapsed;
+  applyCollapse();
+});
+
 async function loadArticles(q=''){
   const list = document.getElementById('articleList'); list.innerHTML='加载中...';
   try{
     const rows = await fetch('/api/articles?search='+encodeURIComponent(q)).then(r=>r.json());
-    list.innerHTML = rows.length ? rows.map(a=>renderCard(a)).join('') : '<div class="card">无结果</div>';
+    _lastArticles = rows || [];
+    list.innerHTML = _lastArticles.length ? _lastArticles.map((a)=>renderCard(a)).join('') : '<div class="card">无结果</div>';
+    // 默认收起多余文章
+    _collapsed = true;
+    applyCollapse();
   }catch(e){
-    list.innerHTML = '<div class="card">加载失败</div>';
+    console.error('loadArticles error:', e);
+    const msg = (e && e.message) ? e.message : '加载失败';
+    list.innerHTML = `<div class="card">${msg}</div>`;
   }
 }
 function renderCard(a){
   const excerpt = (a.content||'').slice(0,220).replace(/(\r\n|\n)/g,' ');
   return `<article class="card"><h3><a href="article.html?id=${a.id}">${escapeHtml(a.title)}</a></h3>
-    <div class="meta">作者：${escapeHtml(a.owner)} · ${a.created_at||''} · 阅读 ${a.likes||0}</div>
+    <div class="meta">作者：${escapeHtml(a.owner)} · ${a.created_at||''} · 阅读 ${a.views||a.likes||0}</div>
     <p style="margin-top:8px;color:#233">${escapeHtml(excerpt)}...</p>
-    <div style="margin-top:10px"><a class="tag" href="article.html?id=${a.id}">阅读全文</a></div></article>`;
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <span class="likes">👍 ${a.likes||0}</span>
+      <a class="tag" href="article.html?id=${a.id}">阅读全文</a>
+    </div></article>`;
 }
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 document.getElementById('searchBtn').addEventListener('click', ()=>loadArticles(document.getElementById('searchInput').value));
+// 支持在输入框按 Enter 键触发搜索
+document.getElementById('searchInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    loadArticles(document.getElementById('searchInput').value);
+  }
+});
 
 // Login state helpers — persist username in localStorage and switch button to profile link
 function setLoggedIn(name){

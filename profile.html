@@ -16,6 +16,7 @@ body{margin:0;font-family:Inter,Arial;background:#eef9ff;color:#102a43}
 .article-item{background:#fff;padding:12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
 .actions{display:flex;gap:8px}
 .btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);cursor:pointer}
+.btn.published{background:#9aa;color:#fff;border:0;cursor:default;opacity:0.9}
 </style>
 </head>
 <body>
@@ -39,7 +40,7 @@ body{margin:0;font-family:Inter,Arial;background:#eef9ff;color:#102a43}
     <div style="background:var(--card);padding:14px;border-radius:12px;box-shadow:0 10px 30px rgba(16,42,67,0.06)">
       <h4>操作</h4>
       <div style="margin-top:10px">
-        <button class="btn" onclick="location.href='edit.html'">写文章</button>
+        <button class="btn" onclick="location.href='edit.html?user='+encodeURIComponent(new URLSearchParams(location.search).get('user')||'guest')">写文章</button>
         <button class="btn" onclick="location.href='index.html'">返回首页</button>
         <button class="btn" id="logoutBtn" onclick="logout()">注销</button>
       </div>
@@ -55,13 +56,44 @@ async function loadProfile(){
     if(u){ document.getElementById('uname').textContent = u.name; document.getElementById('uinfo').textContent = `等级：${u.priority} · 注册：${u.created_at||'-'}`; document.getElementById('avatar').textContent = (u.name||'U')[0].toUpperCase();}
     else{ document.getElementById('uname').textContent = userName; }
     const arts = await fetch(`/api/user/${encodeURIComponent(userName)}/articles`).then(r=>r.json()).catch(()=>[]);
-    const list = document.getElementById('myArticles'); list.innerHTML = arts.length ? arts.map(a=>`<div class="article-item"><div><strong>${a.title}</strong><div style="font-size:12px;color:#667">${a.status} · ${a.created_at||''}</div></div><div class="actions"><button class="btn" onclick="edit(${a.id})">编辑</button><button class="btn" onclick="publish(${a.id})">发布</button></div></div>`).join('') : '<div>尚无文章</div>';
+    const list = document.getElementById('myArticles');
+    list.innerHTML = arts.length ? arts.map(a=>{
+      // 如果文章已发布，标题链接到公开页面；否则链接到编辑页面
+      const titleLink = a.status === 'published' ? `<a href="article.html?id=${a.id}">${a.title}</a>` : `<a href="edit.html?id=${a.id}&user=${encodeURIComponent(userName)}">${a.title} (草稿)</a>`;
+      // determine publish button state: if published and not edited since published -> show disabled 已发布
+      let pubBtn = `<button class="btn" onclick="publish(${a.id})">发布</button>`;
+      if(a.status === 'published'){
+        const publishedAt = a.published_at ? new Date(a.published_at) : null;
+        const updatedAt = a.updated_at ? new Date(a.updated_at) : null;
+        const editedAfterPublish = publishedAt && updatedAt && (updatedAt.getTime() > publishedAt.getTime());
+        if(!editedAfterPublish){
+          pubBtn = `<button class="btn published" disabled>已发布</button>`;
+        } else {
+          pubBtn = `<button class="btn" onclick="publish(${a.id})">发布</button>`;
+        }
+      }
+      return `<div class="article-item"><div><strong>${titleLink}</strong><div style="font-size:12px;color:#667">${a.status} · ${a.created_at||''}</div></div><div class="actions"><button class="btn" onclick="edit(${a.id})">编辑</button>${pubBtn}</div></div>`;
+    }).join('') : '<div>尚无文章</div>';
   }catch(e){ console.warn(e); document.getElementById('myArticles').innerHTML='加载失败'; }
 }
 function edit(id){ location.href = 'edit.html?id='+id+'&user='+encodeURIComponent(userName); }
 async function publish(id){
   if(!confirm('确认发布？')) return;
-  await fetch('/api/articles/'+id+'/publish',{method:'POST'}).then(r=>r.ok?loadProfile():alert('发布失败'));
+  try{
+    const res = await fetch('/api/articles/'+id+'/publish',{
+      method: 'POST',
+      headers: {'content-type':'application/json'},
+      body: JSON.stringify({owner: userName, confirm: true})
+    });
+    const data = await res.json().catch(()=>({}));
+    if(res.ok){
+      loadProfile();
+    }else{
+      alert((data && data.error) ? ('发布失败：'+data.error) : '发布失败');
+    }
+  }catch(e){
+    alert('网络错误');
+  }
 }
 loadProfile();
 // 注销：清除 localStorage 中的登录信息并跳回首页，首页脚本会根据 localStorage 状态恢复登录按钮

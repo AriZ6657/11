@@ -96,16 +96,38 @@ def get_article(method, path, query, headers, body):
     a = article_mgr.get_article(aid)
     if not a:
         return json_response({'error': 'not found'}, status=404)
-    return json_response(a.to_dict())
+    # increment view count for this article
+    try:
+        article_mgr.increment_views(aid)
+        # re-fetch to get updated views
+        a = article_mgr.get_article(aid)
+    except Exception:
+        pass
+    # include whether current user has liked this article when query contains 'user'
+    out = a.to_dict()
+    liked = False
+    if 'user' in query and query.get('user'):
+        try:
+            uname = query.get('user')[0]
+            rows = db.query("SELECT 1 FROM users u JOIN likes l ON u.id = l.user_id WHERE u.name = ? AND l.article_id = ?", (uname, aid))
+            liked = len(rows) > 0
+        except Exception:
+            liked = False
+    out['liked'] = liked
+    return json_response(out)
 
 @route('POST', '/api/articles')
 def create_article(method, path, query, headers, body):
     try:
         payload = json.loads(body.decode('utf-8') or '{}')
+        # debug log incoming payload to detect accidental publish flags from client
+        print(f"[create_article] payload: {payload}")
         title = payload.get('title') or '未命名'
         content = payload.get('content', '')
+        # ignore client-provided status/published_at to avoid accidental publish
         owner = payload.get('owner', 'guest')
         art = article_mgr.create_article(owner, title, content)
+        print(f"[create_article] created id={art.id} status={art.status} published_at={art.published_at}")
         return json_response(art.to_dict(), status=201)
     except Exception as e:
         return json_response({'error': str(e)}, status=400)
@@ -116,10 +138,14 @@ def edit_article(method, path, query, headers, body):
         params = match_pattern(path, '/api/articles/<id>')
         aid = int(params['id'])
         payload = json.loads(body.decode('utf-8') or '{}')
+        # debug log incoming payload to detect accidental publish flags from client
+        print(f"[edit_article] id={aid} payload: {payload}")
+        # ignore client-provided status/published_at to avoid accidental publish
         owner = payload.get('owner', 'guest')
         title = payload.get('title')
         content = payload.get('content')
         art = article_mgr.edit_article(aid, owner, title=title, content=content)
+        print(f"[edit_article] updated id={art.id} status={art.status} published_at={art.published_at}")
         return json_response(art.to_dict())
     except PermissionError as pe:
         return json_response({'error': str(pe)}, status=403)
@@ -133,6 +159,11 @@ def publish_article(method, path, query, headers, body):
         aid = int(params['id'])
         payload = json.loads(body.decode('utf-8') or '{}')
         owner = payload.get('owner', 'guest')
+        # require explicit confirmation to avoid accidental publish
+        confirm = payload.get('confirm', False)
+        print(f"[publish] request: article={aid} owner={owner} confirm={confirm}")
+        if not confirm:
+            return json_response({'error': 'missing confirm flag'}, status=400)
         art = article_mgr.publish_article(aid, owner)
         return json_response(art.to_dict())
     except PermissionError as pe:
@@ -147,8 +178,21 @@ def like_article(method, path, query, headers, body):
         aid = int(params['id'])
         payload = json.loads(body.decode('utf-8') or '{}')
         user = payload.get('user', 'guest')
-        article_mgr.like_article(aid, user)
-        return json_response({'ok': True})
+        likes = article_mgr.like_article(aid, user)
+        return json_response({'ok': True, 'likes': likes})
+    except Exception as e:
+        return json_response({'error': str(e)}, status=400)
+
+
+@route('POST', '/api/articles/<id>/unlike')
+def unlike_article(method, path, query, headers, body):
+    try:
+        params = match_pattern(path, '/api/articles/<id>/unlike')
+        aid = int(params['id'])
+        payload = json.loads(body.decode('utf-8') or '{}')
+        user = payload.get('user', 'guest')
+        likes = article_mgr.unlike_article(aid, user)
+        return json_response({'ok': True, 'likes': likes})
     except Exception as e:
         return json_response({'error': str(e)}, status=400)
 
@@ -192,9 +236,12 @@ def user_articles(method, path, query, headers, body):
     params = match_pattern(path, '/api/user/<name>/articles')
     name = params['name']
     rows = db.query("SELECT * FROM articles WHERE owner = ? ORDER BY created_at DESC", (name,))
-    arts = [Article(title=r['title'], content=r['content'], owner=r['owner'],
+    arts = []
+    for r in rows:
+        views_val = r['views'] if 'views' in r.keys() else 0
+        arts.append(Article(title=r['title'], content=r['content'], owner=r['owner'],
                     priority=r['priority'], status=r['status'], aid=r['id'],
-                    created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes']).to_dict() for r in rows]
+                    created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val).to_dict())
     return json_response(arts)
 
 
