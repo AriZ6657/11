@@ -106,14 +106,19 @@ def get_article(method, path, query, headers, body):
     # include whether current user has liked this article when query contains 'user'
     out = a.to_dict()
     liked = False
+    favorited = False
     if 'user' in query and query.get('user'):
         try:
             uname = query.get('user')[0]
             rows = db.query("SELECT 1 FROM users u JOIN likes l ON u.id = l.user_id WHERE u.name = ? AND l.article_id = ?", (uname, aid))
             liked = len(rows) > 0
+            # check favorites
+            frows = db.query("SELECT 1 FROM users u JOIN favorites f ON u.id = f.user_id WHERE u.name = ? AND f.article_id = ?", (uname, aid))
+            favorited = len(frows) > 0
         except Exception:
             liked = False
     out['liked'] = liked
+    out['favorited'] = favorited
     return json_response(out)
 
 @route('POST', '/api/articles')
@@ -239,9 +244,53 @@ def user_articles(method, path, query, headers, body):
     arts = []
     for r in rows:
         views_val = r['views'] if 'views' in r.keys() else 0
+        # compute favorites count for each article
+        fav_row = db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r['id'],))
+        fav_count = int(fav_row[0]['c']) if fav_row else 0
         arts.append(Article(title=r['title'], content=r['content'], owner=r['owner'],
                     priority=r['priority'], status=r['status'], aid=r['id'],
-                    created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val).to_dict())
+                    created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, favorites=fav_count).to_dict())
+    return json_response(arts)
+
+
+@route('POST', '/api/articles/<id>/favorite')
+def favorite_article(method, path, query, headers, body):
+    try:
+        params = match_pattern(path, '/api/articles/<id>/favorite')
+        aid = int(params['id'])
+        payload = json.loads(body.decode('utf-8') or '{}')
+        user = payload.get('user', 'guest')
+        favs = article_mgr.favorite_article(aid, user)
+        return json_response({'ok': True, 'favorites': favs})
+    except Exception as e:
+        return json_response({'error': str(e)}, status=400)
+
+
+@route('POST', '/api/articles/<id>/unfavorite')
+def unfavorite_article(method, path, query, headers, body):
+    try:
+        params = match_pattern(path, '/api/articles/<id>/unfavorite')
+        aid = int(params['id'])
+        payload = json.loads(body.decode('utf-8') or '{}')
+        user = payload.get('user', 'guest')
+        favs = article_mgr.unfavorite_article(aid, user)
+        return json_response({'ok': True, 'favorites': favs})
+    except Exception as e:
+        return json_response({'error': str(e)}, status=400)
+
+
+@route('GET', '/api/user/<name>/favorites')
+def user_favorites(method, path, query, headers, body):
+    params = match_pattern(path, '/api/user/<name>/favorites')
+    name = params['name']
+    # return list of favorited articles for this user
+    rows = db.query("SELECT a.* FROM articles a JOIN favorites f ON a.id = f.article_id JOIN users u ON u.id = f.user_id WHERE u.name = ? ORDER BY a.created_at DESC", (name,))
+    arts = []
+    for r in rows:
+        views_val = r['views'] if 'views' in r.keys() else 0
+        fav_row = db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r['id'],))
+        fav_count = int(fav_row[0]['c']) if fav_row else 0
+        arts.append(Article(title=r['title'], content=r['content'], owner=r['owner'], priority=r['priority'], status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, favorites=fav_count).to_dict())
     return json_response(arts)
 
 

@@ -36,6 +36,7 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#102a43;b
 .aside .card{padding:12px}
 .tag{display:inline-block;padding:4px 8px;border-radius:6px;background:#eef6ff;color:var(--primary);font-size:12px;margin-right:6px}
 .likes{display:inline-block;padding:4px 8px;border-radius:6px;background:#fff7e6;color:#b35700;font-size:12px;margin-right:8px;border:1px solid rgba(0,0,0,0.04)}
+.favs{display:inline-block;padding:4px 8px;border-radius:6px;background:#ffd6ea;color:#c14b7a;font-size:12px;margin-right:8px;border:1px solid rgba(0,0,0,0.04)}
 @media(max-width:900px){ .header-row{flex-direction:column;gap:8px}.columns{grid-template-columns:1fr} .left{width:100%} .card{width:100%;max-width:100%} }
 </style>
 </head>
@@ -147,6 +148,7 @@ function renderCard(a){
     <p style="margin-top:8px;color:#233">${escapeHtml(excerpt)}...</p>
     <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
       <span class="likes">👍 ${a.likes||0}</span>
+      <span class="favs">★ ${a.favorites||0}</span>
       <a class="tag" href="article.html?id=${a.id}">阅读全文</a>
     </div></article>`;
 }

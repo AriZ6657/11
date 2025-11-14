@@ -27,6 +27,13 @@ body{margin:0;font-family:Inter,Arial;background:#f4fbff;color:#102a43}
  100% { transform: translateX(0) rotate(0deg); }
 }
 .like-badge.shake{animation: like-shake 420ms ease-in-out}
+/* favorite badge (pink with yellow star) */
+.fav-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#ffd6ea;color:#3a1730;font-weight:700;margin-left:10px;border:1px solid rgba(0,0,0,0.04)}
+.fav-badge .star{font-size:14px;line-height:1;color:#f6d22a}
+.fav-badge .count{font-variant-numeric: tabular-nums}
+/* pulse animation for favorite */
+@keyframes fav-pulse{0%{transform:scale(1)}50%{transform:scale(1.08)}100%{transform:scale(1)}}
+.fav-badge.pulse{animation:fav-pulse 300ms ease-in-out}
 </style>
 </head>
 <body>
@@ -40,6 +47,8 @@ body{margin:0;font-family:Inter,Arial;background:#f4fbff;color:#102a43}
       <button id="homeBtn" class="btn" style="background:#eef0f3;color:#102a43;margin-right:8px">返回主页</button>
       <button id="likeBtn" class="btn">点赞</button>
       <span id="likeCount" class="like-badge" role="status" aria-label="点赞数"><span class="thumb">👍</span><span class="count">0</span></span>
+      <button id="favBtn" class="btn" style="background:#fff;color:#c14b7a;border:1px solid rgba(0,0,0,0.04);margin-left:8px">收藏</button>
+      <span id="favCount" class="fav-badge" role="status" aria-label="收藏数"><span class="star">★</span><span class="count">0</span></span>
     </div>
   </div>
   <div id="content" class="content">内容加载中…</div>
@@ -71,10 +80,13 @@ async function load(){
   // update like button state and count
   const likeBtn = document.getElementById('likeBtn');
   const likeCount = document.getElementById('likeCount');
+  const favBtn = document.getElementById('favBtn');
+  const favCount = document.getElementById('favCount');
   if(likeCount){
     const c = likeCount.querySelector('.count');
     if(c) c.textContent = String(a.likes || 0);
   }
+  if(favCount){ const fc = favCount.querySelector('.count'); if(fc) fc.textContent = String(a.favorites || 0); }
   if(a.liked){
     likeBtn.classList.add('liked');
     likeBtn.textContent = '已点赞';
@@ -82,7 +94,34 @@ async function load(){
     likeBtn.classList.remove('liked');
     likeBtn.textContent = '点赞';
   }
+  if(favBtn){
+    if(a.favorited){ favBtn.textContent = '已收藏'; favBtn.style.opacity = '0.9'; }
+    else { favBtn.textContent = '收藏'; favBtn.style.opacity = '1'; }
+  }
 }
+// favorite button handler
+document.getElementById('favBtn').addEventListener('click', async ()=>{
+  try{
+    const user = (typeof localStorage !== 'undefined') ? localStorage.getItem('user') : null;
+    if(!user){ alert('请先登录再收藏'); return; }
+    const favBtn = document.getElementById('favBtn');
+    const favCount = document.getElementById('favCount');
+    if(favBtn.textContent === '已收藏'){
+      const res = await fetch('/api/articles/'+id+'/unfavorite',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user})});
+      const data = await res.json().catch(()=>({}));
+      if(res.ok){ favBtn.textContent = '收藏'; if(favCount && typeof data.favorites !== 'undefined'){ const c = favCount.querySelector('.count'); if(c) c.textContent = String(data.favorites); } }
+      else{ alert((data && data.error) ? data.error : '取消收藏失败'); }
+    }else{
+      const res = await fetch('/api/articles/'+id+'/favorite',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({user})});
+      const data = await res.json().catch(()=>({}));
+      if(res.ok){ favBtn.textContent = '已收藏'; if(favCount && typeof data.favorites !== 'undefined'){ const c = favCount.querySelector('.count'); if(c) c.textContent = String(data.favorites); }
+        // pulse animation
+        try{ favCount.classList.remove('pulse'); void favCount.offsetWidth; favCount.classList.add('pulse'); favCount.addEventListener('animationend', ()=> favCount.classList.remove('pulse'), {once:true}); }catch(e){}
+      }
+      else{ alert((data && data.error) ? data.error : '收藏失败'); }
+    }
+  }catch(e){ alert('网络错误') }
+});
 document.getElementById('likeBtn').addEventListener('click', async ()=>{
   try{
     const user = (typeof localStorage !== 'undefined') ? localStorage.getItem('user') : null;

@@ -34,6 +34,11 @@ body{margin:0;font-family:Inter,Arial;background:#eef9ff;color:#102a43}
       <h3>我的文章</h3>
       <div class="articles" id="myArticles">加载中…</div>
     </div>
+    
+    <div style="margin-top:18px">
+      <h3>我的收藏</h3>
+      <div class="articles" id="myFavorites">加载中…</div>
+    </div>
   </div>
 
   <div style="width:300px">
@@ -76,6 +81,14 @@ async function loadProfile(){
     }).join('') : '<div>尚无文章</div>';
   }catch(e){ console.warn(e); document.getElementById('myArticles').innerHTML='加载失败'; }
 }
+// load user's favorites
+async function loadFavorites(){
+  try{
+    const favs = await fetch(`/api/user/${encodeURIComponent(userName)}/favorites`).then(r=>r.json()).catch(()=>[]);
+    const favList = document.getElementById('myFavorites');
+    favList.innerHTML = favs.length ? favs.map(a=>`<div class="article-item"><div><strong><a href="article.html?id=${a.id}">${a.title}</a></strong><div style="font-size:12px;color:#667">${a.created_at||''} · 收藏 ${a.favorites||0}</div></div></div>`).join('') : '<div>尚无收藏</div>';
+  }catch(e){ console.warn(e); document.getElementById('myFavorites').innerHTML='加载失败'; }
+}
 function edit(id){ location.href = 'edit.html?id='+id+'&user='+encodeURIComponent(userName); }
 async function publish(id){
   if(!confirm('确认发布？')) return;
@@ -88,6 +101,8 @@ async function publish(id){
     const data = await res.json().catch(()=>({}));
     if(res.ok){
       loadProfile();
+      // refresh favorites list
+      try{ await loadFavorites(); }catch(e){ console.warn(e); document.getElementById('myFavorites').innerHTML='加载失败'; }
     }else{
       alert((data && data.error) ? ('发布失败：'+data.error) : '发布失败');
     }
@@ -96,6 +111,7 @@ async function publish(id){
   }
 }
 loadProfile();
+loadFavorites();
 // 注销：清除 localStorage 中的登录信息并跳回首页，首页脚本会根据 localStorage 状态恢复登录按钮
 function logout(){
   try{ localStorage.removeItem('user'); }catch(e){}

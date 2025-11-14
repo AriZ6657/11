@@ -27,7 +27,7 @@ class Article:
     def __init__(self, title: str, content: str, owner: str, priority: int = 0,
                  status: str = 'draft', aid: Optional[int] = None,
                  created_at: Optional[str] = None, updated_at: Optional[str] = None, likes: int = 0, views: int = 0,
-                 published_at: Optional[str] = None):
+                 published_at: Optional[str] = None, favorites: int = 0):
         self.id = aid
         self.title = title
         self.content = content
@@ -39,6 +39,7 @@ class Article:
         self.likes = likes
         self.views = views
         self.published_at = published_at
+        self.favorites = favorites
 
     def to_dict(self):
         return {
@@ -46,7 +47,8 @@ class Article:
             'owner': self.owner, 'priority': self.priority, 'status': self.status,
             'created_at': self.created_at, 'updated_at': self.updated_at, 'likes': self.likes,
             'views': self.views,
-            'published_at': self.published_at
+            'published_at': self.published_at,
+            'favorites': self.favorites
         }
 
 
@@ -170,9 +172,11 @@ class ArticleManager:
         aid = cur.lastrowid
         row = self.db.query("SELECT * FROM articles WHERE id = ?", (aid,))[0]
         pub_val = row['published_at'] if 'published_at' in row.keys() else None
+        fav_row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (row['id'],))
+        fav_count = int(fav_row[0]['c']) if fav_row else 0
         return Article(title=row['title'], content=row['content'], owner=row['owner'], priority=row['priority'],
-                       status=row['status'], aid=row['id'], created_at=row['created_at'], updated_at=row['updated_at'],
-                       likes=row['likes'], views=row['views'], published_at=pub_val)
+                   status=row['status'], aid=row['id'], created_at=row['created_at'], updated_at=row['updated_at'],
+                   likes=row['likes'], views=row['views'], published_at=pub_val, favorites=fav_count)
 
     def edit_article(self, article_id: int, owner: str, title: Optional[str] = None, content: Optional[str] = None) -> Article:
         row = self.db.query("SELECT * FROM articles WHERE id = ?", (article_id,))
@@ -188,9 +192,11 @@ class ArticleManager:
         r2 = self.db.query("SELECT * FROM articles WHERE id = ?", (article_id,))[0]
         views_val = r2['views'] if 'views' in r2.keys() else 0
         pub_val = r2['published_at'] if 'published_at' in r2.keys() else None
+        fav_row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r2['id'],))
+        fav_count = int(fav_row[0]['c']) if fav_row else 0
         return Article(title=r2['title'], content=r2['content'], owner=r2['owner'], priority=r2['priority'],
-                       status=r2['status'], aid=r2['id'], created_at=r2['created_at'], updated_at=r2['updated_at'],
-                       likes=r2['likes'], views=views_val, published_at=pub_val)
+                   status=r2['status'], aid=r2['id'], created_at=r2['created_at'], updated_at=r2['updated_at'],
+                   likes=r2['likes'], views=views_val, published_at=pub_val, favorites=fav_count)
 
     def publish_article(self, article_id: int, owner: str) -> Article:
         row = self.db.query("SELECT * FROM articles WHERE id = ?", (article_id,))
@@ -245,6 +251,19 @@ class ArticleManager:
             self.db.execute("INSERT INTO favorites(user_id, article_id) VALUES(?,?)", (uid, article_id))
         except sqlite3.IntegrityError:
             pass
+        # return favorites count
+        row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (article_id,))
+        return int(row[0]['c']) if row else 0
+
+    def unfavorite_article(self, article_id: int, user_name: str) -> None:
+        user = self.db.query("SELECT id FROM users WHERE name = ?", (user_name,))
+        if not user:
+            raise ValueError("User not found")
+        uid = user[0]['id']
+        cur = self.db.execute("DELETE FROM favorites WHERE user_id = ? AND article_id = ?", (uid, article_id))
+        # return favorites count
+        row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (article_id,))
+        return int(row[0]['c']) if row else 0
 
     def get_article(self, article_id: int) -> Optional[Article]:
         rows = self.db.query("SELECT * FROM articles WHERE id = ?", (article_id,))
@@ -253,8 +272,11 @@ class ArticleManager:
         r = rows[0]
         views_val = r['views'] if 'views' in r.keys() else 0
         pub_val = r['published_at'] if 'published_at' in r.keys() else None
+        # compute favorites count
+        fav_row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r['id'],))
+        fav_count = int(fav_row[0]['c']) if fav_row else 0
         return Article(title=r['title'], content=r['content'], owner=r['owner'], priority=r['priority'],
-                       status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, published_at=pub_val)
+                       status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, published_at=pub_val, favorites=fav_count)
 
     def list_published(self, limit: int = 20, offset: int = 0) -> List[Article]:
         rows = self.db.query("SELECT * FROM articles WHERE status='published' ORDER BY created_at DESC LIMIT ? OFFSET ?", (limit, offset))
@@ -262,8 +284,10 @@ class ArticleManager:
         for r in rows:
             views_val = r['views'] if 'views' in r.keys() else 0
             pub_val = r['published_at'] if 'published_at' in r.keys() else None
+            fav_row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r['id'],))
+            fav_count = int(fav_row[0]['c']) if fav_row else 0
             result.append(Article(title=r['title'], content=r['content'], owner=r['owner'], priority=r['priority'],
-                        status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, published_at=pub_val))
+                        status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, published_at=pub_val, favorites=fav_count))
         return result
 
     def increment_views(self, article_id: int) -> None:
@@ -301,8 +325,10 @@ class ArticleSearchSubManager:
         result = []
         for r in rows:
             views_val = r['views'] if 'views' in r.keys() else 0
+            fav_row = self.db.query("SELECT COUNT(*) as c FROM favorites WHERE article_id = ?", (r['id'],))
+            fav_count = int(fav_row[0]['c']) if fav_row else 0
             result.append(Article(title=r['title'], content=r['content'], owner=r['owner'], priority=r['priority'],
-                        status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val))
+                        status=r['status'], aid=r['id'], created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes'], views=views_val, favorites=fav_count))
         return result
 
 
