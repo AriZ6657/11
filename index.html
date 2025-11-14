@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>论坛博客 - 首页</title>
+<style>
+:root{
+  --bg:#eaf6ff; --primary:#1f8efc; --card:#ffffff; --muted:#667;
+  --maxw:1100px;
+}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;color:#102a43;background:var(--bg);}
+body::before{
+  content:"";position:fixed;inset:0;background:linear-gradient(180deg,rgba(31,142,252,0.12),rgba(31,142,252,0.06));
+  z-index:-1;
+}
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;background:rgba(255,255,255,0.6);backdrop-filter:blur(6px);box-shadow:0 1px 6px rgba(0,0,0,0.06)}
+.container{max-width:var(--maxw);margin:0 auto;display:flex;align-items:center;width:100%}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:8px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+.spacer{flex:1}
+.login-btn{background:transparent;border:1px solid rgba(0,0,0,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
+.header-row{max-width:var(--maxw);margin:18px auto;display:flex;gap:12px;padding:0 16px}
+.panel{background:var(--card);border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(16,42,67,0.06)}
+.left{width:240px;min-height:120px}
+.right{flex:1;display:flex;justify-content:flex-end;align-items:center}
+.search-wrap{display:flex;justify-content:center;margin-top:12px}
+.search{width:100%;max-width:860px;display:flex;gap:8px;background:#fff;padding:14px;border-radius:10px;box-shadow:0 8px 22px rgba(16,42,67,0.06)}
+.search input{flex:1;border:0;outline:none;font-size:16px}
+.search button{background:var(--primary);color:#fff;border:0;padding:10px 14px;border-radius:8px;cursor:pointer}
+.columns{max-width:var(--maxw);margin:18px auto;display:grid;grid-template-columns:1fr 320px;gap:18px;padding:0 16px}
+.list{display:flex;flex-direction:column;gap:12px}
+.card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(16,42,67,0.04)}
+.card h3{margin:0;font-size:18px}
+.meta{color:var(--muted);font-size:13px;margin-top:6px}
+.aside .card{padding:12px}
+.tag{display:inline-block;padding:4px 8px;border-radius:6px;background:#eef6ff;color:var(--primary);font-size:12px;margin-right:6px}
+@media(max-width:900px){ .header-row{flex-direction:column;gap:8px}.columns{grid-template-columns:1fr} .left{width:100%} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="container">
+    <div class="brand"><div class="logo">博</div><div><strong>论坛博客</strong><div style="font-size:12px;color:var(--muted)">社区 · 分享</div></div></div>
+    <div class="spacer"></div>
+    <button id="openLogin" class="login-btn">登录 / 注册</button>
+  </div>
+</header>
+
+<section class="header-row">
+  <div class="panel left" id="trafficPanel">
+    <h4>网站流量</h4>
+    <div id="trafficValue" style="font-size:28px;margin-top:8px;color:var(--primary)">–</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px">实时在线 / 日访问</div>
+  </div>
+  <div class="panel right">
+    <div style="text-align:right">
+      <div style="font-size:14px;color:var(--muted)">欢迎访问</div>
+      <div style="font-size:16px;font-weight:600">探索优质文章</div>
+    </div>
+  </div>
+</section>
+
+<section class="search-wrap">
+  <div class="search">
+    <input id="searchInput" placeholder="搜索文章标题或内容..." />
+    <button id="searchBtn">搜索</button>
+  </div>
+</section>
+
+<section class="columns">
+  <div class="list" id="articleList">
+    <!-- 文章由 JS 动态渲染 -->
+  </div>
+
+</section>
+
+<!-- 登录弹窗（示例，无后端校验需对接 /api/login /api/register） -->
+<div id="loginModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+  <div style="background:#fff;padding:18px;border-radius:10px;min-width:320px">
+    <h3>登录 / 注册</h3>
+    <input id="loginName" placeholder="用户名" style="width:100%;padding:8px;margin-top:8px" />
+    <input id="loginPwd" type="password" placeholder="密码" style="width:100%;padding:8px;margin-top:8px" />
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button id="closeLogin">取消</button>
+      <button id="doLogin" style="background:var(--primary);color:#fff;border:0;padding:8px 12px;border-radius:6px">登录</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = (path, opts)=>fetch(path, opts).then(r=>r.ok?r.json():r.json().then(e=>Promise.reject(e)));
+
+async function loadTraffic(){
+  try{
+    const data = await fetch('/api/metrics').then(r=>r.json()).catch(()=>({online:0,daily:0}));
+    document.getElementById('trafficValue').textContent = `${data.online || 0} 在线 • ${data.daily || 0} 日访问`;
+  }catch(e){ console.warn(e) }
+}
+async function loadArticles(q=''){
+  const list = document.getElementById('articleList'); list.innerHTML='加载中...';
+  try{
+    const rows = await fetch('/api/articles?search='+encodeURIComponent(q)).then(r=>r.json());
+    list.innerHTML = rows.length ? rows.map(a=>renderCard(a)).join('') : '<div class="card">无结果</div>';
+  }catch(e){
+    list.innerHTML = '<div class="card">加载失败</div>';
+  }
+}
+function renderCard(a){
+  const excerpt = (a.content||'').slice(0,220).replace(/(\r\n|\n)/g,' ');
+  return `<article class="card"><h3><a href="article.html?id=${a.id}">${escapeHtml(a.title)}</a></h3>
+    <div class="meta">作者：${escapeHtml(a.owner)} · ${a.created_at||''} · 阅读 ${a.likes||0}</div>
+    <p style="margin-top:8px;color:#233">${escapeHtml(excerpt)}...</p>
+    <div style="margin-top:10px"><a class="tag" href="article.html?id=${a.id}">阅读全文</a></div></article>`;
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('searchBtn').addEventListener('click', ()=>loadArticles(document.getElementById('searchInput').value));
+document.getElementById('openLogin').addEventListener('click', ()=>document.getElementById('loginModal').style.display='flex');
+document.getElementById('closeLogin').addEventListener('click', ()=>document.getElementById('loginModal').style.display='none');
+document.getElementById('doLogin').addEventListener('click', async ()=>{
+  const name=document.getElementById('loginName').value, pwd=document.getElementById('loginPwd').value;
+  try{
+    const res = await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,pwd})});
+    if(res.ok){ document.getElementById('loginModal').style.display='none'; document.getElementById('openLogin').textContent = name; }
+    else{ alert('登录失败'); }
+  }catch(e){ alert('网络错误') }
+});
+
+loadTraffic(); loadArticles();
+setInterval(loadTraffic, 15000);
+</script>
+</body>
+</html>

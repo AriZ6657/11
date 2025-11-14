@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>个人中心</title>
+<style>
+:root{--primary:#1f8efc;--card:#fff;--muted:#667}
+body{margin:0;font-family:Inter,Arial;background:#eef9ff;color:#102a43}
+.container{max-width:980px;margin:28px auto;padding:0 16px;display:flex;gap:18px}
+.profile-front{flex:1;background:var(--card);padding:18px;border-radius:12px;box-shadow:0 10px 30px rgba(16,42,67,0.06)}
+.header{display:flex;gap:18px;align-items:center}
+.avatar{width:96px;height:96px;border-radius:12px;background:linear-gradient(135deg,var(--primary),#60a8ff);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px}
+.info h2{margin:0}
+.meta{color:var(--muted);margin-top:6px}
+.articles{margin-top:16px;display:flex;flex-direction:column;gap:10px}
+.article-item{background:#fff;padding:12px;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
+.actions{display:flex;gap:8px}
+.btn{padding:6px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="profile-front">
+    <div class="header">
+      <div class="avatar" id="avatar">U</div>
+      <div class="info">
+        <h2 id="uname">用户名</h2>
+        <div class="meta" id="uinfo">等级：- · 注册：-</div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">
+      <h3>我的文章</h3>
+      <div class="articles" id="myArticles">加载中…</div>
+    </div>
+  </div>
+
+  <div style="width:300px">
+    <div style="background:var(--card);padding:14px;border-radius:12px;box-shadow:0 10px 30px rgba(16,42,67,0.06)">
+      <h4>操作</h4>
+      <div style="margin-top:10px">
+        <button class="btn" onclick="location.href='edit.html'">写文章</button>
+        <button class="btn" onclick="location.href='index.html'">返回首页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const userName = new URLSearchParams(location.search).get('user') || 'guest';
+async function loadProfile(){
+  try{
+    const u = await fetch('/api/user/'+encodeURIComponent(userName)).then(r=>r.json()).catch(()=>null);
+    if(u){ document.getElementById('uname').textContent = u.name; document.getElementById('uinfo').textContent = `等级：${u.priority} · 注册：${u.created_at||'-'}`; document.getElementById('avatar').textContent = (u.name||'U')[0].toUpperCase();}
+    else{ document.getElementById('uname').textContent = userName; }
+    const arts = await fetch(`/api/user/${encodeURIComponent(userName)}/articles`).then(r=>r.json()).catch(()=>[]);
+    const list = document.getElementById('myArticles'); list.innerHTML = arts.length ? arts.map(a=>`<div class="article-item"><div><strong>${a.title}</strong><div style="font-size:12px;color:#667">${a.status} · ${a.created_at||''}</div></div><div class="actions"><button class="btn" onclick="edit(${a.id})">编辑</button><button class="btn" onclick="publish(${a.id})">发布</button></div></div>`).join('') : '<div>尚无文章</div>';
+  }catch(e){ console.warn(e); document.getElementById('myArticles').innerHTML='加载失败'; }
+}
+function edit(id){ location.href = 'edit.html?id='+id+'&user='+encodeURIComponent(userName); }
+async function publish(id){
+  if(!confirm('确认发布？')) return;
+  await fetch('/api/articles/'+id+'/publish',{method:'POST'}).then(r=>r.ok?loadProfile():alert('发布失败'));
+}
+loadProfile();
+</script>
+</body>
+</html>

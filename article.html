@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>文章</title>
+<style>
+body{margin:0;font-family:Inter,Arial;background:#f4fbff;color:#102a43}
+.container{max-width:900px;margin:28px auto;padding:16px}
+.header{display:flex;justify-content:space-between;align-items:center}
+.title{font-size:28px;margin:0}
+.meta{color:#667;font-size:13px}
+.content{background:#fff;padding:18px;border-radius:10px;margin-top:12px;box-shadow:0 10px 30px rgba(16,42,67,0.05)}
+.btn{padding:8px 10px;border-radius:8px;border:0;background:#1f8efc;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <h1 id="title" class="title">加载中…</h1>
+      <div id="meta" class="meta"></div>
+    </div>
+    <div>
+      <button id="likeBtn" class="btn">点赞</button>
+    </div>
+  </div>
+  <div id="content" class="content">内容加载中…</div>
+</div>
+
+<script>
+function md2html(s){
+  if(!s) return '';
+  let out = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  out = out.replace(/^###### (.*$)/gm,'<h6>$1</h6>').replace(/^##### (.*$)/gm,'<h5>$1</h5>')
+    .replace(/^#### (.*$)/gm,'<h4>$1</h4>').replace(/^### (.*$)/gm,'<h3>$1</h3>')
+    .replace(/^## (.*$)/gm,'<h2>$1</h2>').replace(/^# (.*$)/gm,'<h1>$1</h1>');
+  out = out.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>');
+  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  out = out.replace(/\n/g,'<br/>');
+  return out;
+}
+const id = new URLSearchParams(location.search).get('id');
+async function load(){
+  if(!id){ document.getElementById('title').textContent='文章未指定'; return; }
+  const a = await fetch('/api/articles/'+id).then(r=>r.json()).catch(()=>null);
+  if(!a){ document.getElementById('title').textContent='未找到文章'; return; }
+  document.getElementById('title').textContent = a.title;
+  document.getElementById('meta').textContent = `作者：${a.owner} · ${a.created_at || ''} · 阅读 ${a.likes||0}`;
+  document.getElementById('content').innerHTML = md2html(a.content);
+}
+document.getElementById('likeBtn').addEventListener('click', async ()=>{
+  try{
+    const res = await fetch('/api/articles/'+id+'/like',{method:'POST'});
+    if(res.ok){ alert('已点赞'); load(); } else alert('点赞失败');
+  }catch(e){ alert('网络错误') }
+});
+load();
+</script>
+</body>
+</html>

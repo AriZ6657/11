@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>写文章 · 编辑器</title>
+<style>
+:root{--primary:#1f8efc}
+body{margin:0;font-family:Inter,Arial;background:#f5fbff;color:#102a43}
+.container{max-width:980px;margin:20px auto;padding:16px}
+.toolbar{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.input{width:100%;padding:10px;border-radius:8px;border:1px solid #dde;box-sizing:border-box;background:#fff}
+.editor{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+textarea{width:100%;height:400px;border-radius:8px;border:1px solid #dfe;resize:vertical;padding:12px;font-family:ui-monospace,monospace}
+.preview{background:#fff;padding:12px;border-radius:8px;border:1px solid #e6eefc;overflow:auto;height:400px}
+.btn{padding:8px 12px;border-radius:8px;background:var(--primary);color:#fff;border:0;cursor:pointer}
+.note{font-size:13px;color:#667;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex;gap:12px;align-items:center">
+    <input id="title" class="input" placeholder="文章标题" />
+    <button id="save" class="btn">保存草稿</button>
+    <button id="publish" class="btn" style="background:#0b7ee6">发布</button>
+  </div>
+
+  <div class="editor" style="margin-top:12px">
+    <textarea id="md" placeholder="在此写入 Markdown 内容..."></textarea>
+    <div class="preview" id="preview">实时预览</div>
+  </div>
+
+  <div class="note">支持基础 Markdown：# 标题、**加粗**、*斜体*、链接 [text](url)、换行</div>
+</div>
+
+<script>
+const mdEl = document.getElementById('md'), pre = document.getElementById('preview'), titleEl=document.getElementById('title');
+const user = new URLSearchParams(location.search).get('user') || 'guest';
+function md2html(s){
+  if(!s) return '';
+  let out = s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  out = out.replace(/^###### (.*$)/gm,'<h6>$1</h6>').replace(/^##### (.*$)/gm,'<h5>$1</h5>')
+    .replace(/^#### (.*$)/gm,'<h4>$1</h4>').replace(/^### (.*$)/gm,'<h3>$1</h3>')
+    .replace(/^## (.*$)/gm,'<h2>$1</h2>').replace(/^# (.*$)/gm,'<h1>$1</h1>');
+  out = out.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>');
+  out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  out = out.replace(/\n/g,'<br/>');
+  return out;
+}
+mdEl.addEventListener('input', ()=> pre.innerHTML = md2html(mdEl.value));
+pre.innerHTML = md2html(mdEl.value);
+
+const articleId = new URLSearchParams(location.search).get('id');
+async function loadArticle(){
+  if(!articleId) return;
+  const a = await fetch('/api/articles/'+articleId).then(r=>r.json()).catch(()=>null);
+  if(a){ titleEl.value = a.title; mdEl.value = a.content; pre.innerHTML = md2html(a.content); }
+}
+document.getElementById('save').addEventListener('click', async ()=>{
+  const payload = {title:titleEl.value||'未命名',content:mdEl.value,owner:user};
+  const url = articleId ? '/api/articles/'+articleId : '/api/articles';
+  const method = articleId ? 'PUT' : 'POST';
+  const res = await fetch(url,{method,headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+  if(res.ok){ alert('保存成功'); if(!articleId) location.href='profile.html?user='+encodeURIComponent(user); }
+  else alert('保存失败');
+});
+document.getElementById('publish').addEventListener('click', async ()=>{
+  if(!articleId){ alert('请先保存后发布'); return; }
+  const res = await fetch('/api/articles/'+articleId+'/publish',{method:'POST'});
+  if(res.ok){ alert('已发布'); location.href='article.html?id='+articleId; } else alert('发布失败');
+});
+loadArticle();
+</script>
+</body>
+</html>
