@@ -83,6 +83,7 @@ body::before{
     <input id="loginPwd" type="password" placeholder="密码" style="width:100%;padding:8px;margin-top:8px" />
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
       <button id="closeLogin">取消</button>
+      <button id="doRegister" style="background:#fff;color:var(--primary);border:1px solid var(--primary);padding:8px 12px;border-radius:6px">注册</button>
       <button id="doLogin" style="background:var(--primary);color:#fff;border:0;padding:8px 12px;border-radius:6px">登录</button>
     </div>
   </div>
@@ -116,17 +117,78 @@ function renderCard(a){
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 document.getElementById('searchBtn').addEventListener('click', ()=>loadArticles(document.getElementById('searchInput').value));
-document.getElementById('openLogin').addEventListener('click', ()=>document.getElementById('loginModal').style.display='flex');
-document.getElementById('closeLogin').addEventListener('click', ()=>document.getElementById('loginModal').style.display='none');
-document.getElementById('doLogin').addEventListener('click', async ()=>{
-  const name=document.getElementById('loginName').value, pwd=document.getElementById('loginPwd').value;
-  try{
-    const res = await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,pwd})});
-    if(res.ok){ document.getElementById('loginModal').style.display='none'; document.getElementById('openLogin').textContent = name; }
-    else{ alert('登录失败'); }
-  }catch(e){ alert('网络错误') }
+
+// Login state helpers — persist username in localStorage and switch button to profile link
+function setLoggedIn(name){
+  try{ localStorage.setItem('user', name); }catch(e){}
+  const btn = document.getElementById('openLogin');
+  btn.textContent = name;
+  btn.onclick = ()=>{ location.href = '/profile.html?user=' + encodeURIComponent(name); };
+  btn.classList.add('logged-in');
+}
+
+function setLoggedOut(){
+  try{ localStorage.removeItem('user'); }catch(e){}
+  const btn = document.getElementById('openLogin');
+  btn.textContent = '登录 / 注册';
+  btn.onclick = ()=>{ document.getElementById('loginModal').style.display='flex'; };
+  btn.classList.remove('logged-in');
+}
+
+function initLoginState(){
+  const u = (function(){ try{return localStorage.getItem('user')}catch(e){return null} })();
+  if(u){ setLoggedIn(u); }
+  else{ setLoggedOut(); }
+}
+
+document.getElementById('openLogin').addEventListener('click', (e)=>{
+  // if logged-in, the onclick has been swapped to redirect; otherwise show modal
+  const btn = e.currentTarget;
+  if(btn.classList.contains('logged-in')){
+    // allow default onclick to run (redirect)
+    return;
+  }
+  document.getElementById('loginModal').style.display = 'flex';
 });
 
+document.getElementById('closeLogin').addEventListener('click', ()=>{
+  document.getElementById('loginModal').style.display='none';
+});
+
+document.getElementById('doLogin').addEventListener('click', async ()=>{
+  const name=document.getElementById('loginName').value.trim(), pwd=document.getElementById('loginPwd').value;
+  if(!name || !pwd){ alert('请输入用户名和密码'); return; }
+  try{
+    const res = await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,pwd})});
+    const data = await res.json().catch(()=>({}));
+    if(data && data.ok){
+      document.getElementById('loginModal').style.display='none';
+      setLoggedIn(name);
+    }else{
+      alert('登录失败');
+    }
+  }catch(e){ alert('网络错误'); }
+});
+
+// 注册并自动登录：调用 /api/register，然后在成功时自动登录（保存 localStorage）
+document.getElementById('doRegister').addEventListener('click', async ()=>{
+  const name=document.getElementById('loginName').value.trim(), pwd=document.getElementById('loginPwd').value;
+  if(!name || !pwd){ alert('请输入用户名和密码'); return; }
+  try{
+    const res = await fetch('/api/register',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name,pwd})});
+    const data = await res.json().catch(()=>({}));
+    if(res.ok){
+      // 注册成功（后端返回用户对象） — 自动登录
+      document.getElementById('loginModal').style.display='none';
+      setLoggedIn(name);
+    }else{
+      // 后端可能返回 {error: '...'}
+      alert((data && data.error) ? data.error : '注册失败');
+    }
+  }catch(e){ alert('网络错误'); }
+});
+
+initLoginState();
 loadTraffic(); loadArticles();
 setInterval(loadTraffic, 15000);
 </script>

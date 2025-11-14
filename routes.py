@@ -197,6 +197,44 @@ def user_articles(method, path, query, headers, body):
                     created_at=r['created_at'], updated_at=r['updated_at'], likes=r['likes']).to_dict() for r in rows]
     return json_response(arts)
 
+
+# Generic static file handler for simple projects: serve files in CWD
+# Matches single-segment paths like '/profile.html', '/edit.html', '/script.js'
+@route('GET', '/<fname>')
+def static_file_handler(method, path, query, headers, body):
+    params = match_pattern(path, '/<fname>')
+    if params is None:
+        return json_response({'error': 'not found'}, status=404)
+    fname = params['fname']
+    # security: disallow path traversal
+    if '..' in fname or fname.startswith('/') or fname.startswith('\\'):
+        return json_response({'error': 'invalid file path'}, status=400)
+    if not os.path.exists(fname) or not os.path.isfile(fname):
+        return json_response({'error': 'not found'}, status=404)
+    try:
+        with open(fname, 'rb') as f:
+            data = f.read()
+        # determine content type by extension
+        if fname.endswith('.html'):
+            ctype = 'text/html; charset=utf-8'
+        elif fname.endswith('.css'):
+            ctype = 'text/css; charset=utf-8'
+        elif fname.endswith('.js'):
+            ctype = 'application/javascript; charset=utf-8'
+        elif fname.endswith('.json'):
+            ctype = 'application/json; charset=utf-8'
+        elif fname.endswith('.png'):
+            ctype = 'image/png'
+        elif fname.endswith('.jpg') or fname.endswith('.jpeg'):
+            ctype = 'image/jpeg'
+        elif fname.endswith('.gif'):
+            ctype = 'image/gif'
+        else:
+            ctype = 'application/octet-stream'
+        return 200, {'Content-Type': ctype, 'Content-Length': str(len(data))}, data
+    except Exception as e:
+        return json_response({'error': str(e)}, status=500)
+
 # ---- Dispatcher used by your http server ----
 def dispatch_request(method: str, raw_path: str, headers: Dict[str, str], body: bytes) -> RouteResult:
     """主分发函数。raw_path 可包含查询串。"""
